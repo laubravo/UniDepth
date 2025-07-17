@@ -8,7 +8,6 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import wandb
 from PIL import Image
 
 from unidepth.utils.misc import ssi_helper
@@ -130,72 +129,3 @@ def save_file_ply(xyz, rgb, pc_file):
                 xyz[i, 0], xyz[i, 1], xyz[i, 2], rgb[i, 0], rgb[i, 1], rgb[i, 2]
             )
             f.write(str_v)
-
-
-# really awful fct... FIXME
-def log_train_artifacts(rgbs, gts, preds, ds_name, step, infos={}):
-    rgbs = [
-        (127.5 * (rgb + 1))
-        .clip(0, 255)
-        .to(torch.uint8)
-        .cpu()
-        .detach()
-        .permute(1, 2, 0)
-        .numpy()
-        for rgb in rgbs
-    ]
-
-    new_gts, new_preds = [], []
-    if len(gts) > 0:
-        for i, gt in enumerate(gts):
-            scale, shift = ssi_helper(
-                gts[i][gts[i] > 0].cpu().detach(), preds[i][gts[i] > 0].cpu().detach()
-            )
-            gt = gts[i].cpu().detach().squeeze().numpy()
-            pred = (preds[i].cpu().detach() * scale + shift).squeeze().numpy()
-            vmin = gt[gt > 0].min() if (gt > 0).any() else 0.0
-            vmax = gt.max() if (gt > 0).any() else 0.1
-            new_gts.append(colorize(gt, vmin=vmin, vmax=vmax))
-            new_preds.append(colorize(pred, vmin=vmin, vmax=vmax))
-        gts, preds = new_gts, new_preds
-    else:
-        preds = [
-            colorize(pred.cpu().detach().squeeze().numpy(), 0.0, 80.0)
-            for i, pred in enumerate(preds)
-        ]
-
-    num_additional, additionals = 0, []
-    for name, info in infos.items():
-        num_additional += 1
-        if info.shape[1] == 3:
-            additionals.extend(
-                [
-                    (127.5 * (x + 1))
-                    .clip(0, 255)
-                    .to(torch.uint8)
-                    .cpu()
-                    .detach()
-                    .permute(1, 2, 0)
-                    .numpy()
-                    for x in info[:4]
-                ]
-            )
-        else:
-            additionals.extend(
-                [
-                    colorize(x.cpu().detach().squeeze().numpy())
-                    for i, x in enumerate(info[:4])
-                ]
-            )
-
-    num_rows = 2 + int(len(gts) > 0) + num_additional
-    artifacts_grid = image_grid(
-        [*rgbs, *gts, *preds, *additionals], num_rows, len(rgbs)
-    )
-    try:
-        wandb.log({f"{ds_name}_training": [wandb.Image(artifacts_grid)]}, step=step)
-    except:
-        Image.fromarray(artifacts_grid).save(
-            os.path.join(os.environ["HOME"], "Workspace", f"art_grid{step}.png")
-        )
-        print("Logging training images failed")

@@ -34,23 +34,32 @@ STACKING_FNS = {
 
 
 def get_paddings(original_shape, aspect_ratio_range):
-    # Original dimensions
+    """The corrected function with rounding.
+    Modified using info from issue #123: https://github.com/lpiccinelli-eth/UniDepth/issues/123
+    """
     H_ori, W_ori = original_shape
     orig_aspect_ratio = W_ori / H_ori
 
-    # Determine the closest aspect ratio within the range
     min_ratio, max_ratio = aspect_ratio_range
+
+    # If original aspect ratio is already within the valid range, no padding is needed.
+    # This comparison also helps avoid the floating point issues.
+    if min_ratio <= orig_aspect_ratio <= max_ratio:
+        return (0, 0, 0, 0), (H_ori, W_ori)
+
     target_aspect_ratio = min(max_ratio, max(min_ratio, orig_aspect_ratio))
 
-    if orig_aspect_ratio > target_aspect_ratio:  # Too wide
+    if orig_aspect_ratio > target_aspect_ratio:  # Too wide, need to add height
         W_new = W_ori
-        H_new = int(W_ori / target_aspect_ratio)
+        # Use round() to prevent floating point truncation errors
+        H_new = round(W_ori / target_aspect_ratio)
         pad_top = (H_new - H_ori) // 2
         pad_bottom = H_new - H_ori - pad_top
         pad_left, pad_right = 0, 0
-    else:  # Too tall
+    else:  # Too tall, need to add width
         H_new = H_ori
-        W_new = int(H_ori * target_aspect_ratio)
+        # Use round() to prevent floating point truncation errors
+        W_new = round(H_ori * target_aspect_ratio)
         pad_left = (W_new - W_ori) // 2
         pad_right = W_new - W_ori - pad_left
         pad_top, pad_bottom = 0, 0
